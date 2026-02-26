@@ -1,8 +1,20 @@
 const DEFAULT_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
+function getLocaleCountryCode() {
+  const uiLanguage = chrome.i18n?.getUILanguage?.() || "";
+  const localeParts = uiLanguage.split(/[-_]/);
+  const regionCandidate = localeParts.length > 1 ? localeParts[localeParts.length - 1] : "";
+
+  if (/^[a-z]{2}$/i.test(regionCandidate)) {
+    return regionCandidate.toUpperCase();
+  }
+
+  return "US";
+}
+
 const state = {
   timeZone: DEFAULT_TIME_ZONE,
-  countryCode: "UN",
+  countryCode: getLocaleCountryCode(),
   lastSync: null
 };
 
@@ -26,29 +38,64 @@ const formatTime = () =>
     timeZone: state.timeZone
   }).format(new Date());
 
-async function syncLocationByIp() {
-  try {
-    const response = await fetch("https://ipapi.co/json/");
+async function fetchFromIpApi() {
+  const response = await fetch("https://ipapi.co/json/");
 
-    if (!response.ok) {
-      throw new Error(`Location lookup failed with ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data?.timezone) {
-      state.timeZone = data.timezone;
-    }
-
-    if (data?.country_code) {
-      state.countryCode = data.country_code;
-    }
-
-    state.lastSync = Date.now();
-    await chrome.storage.local.set({ clockClockState: state });
-  } catch (error) {
-    console.warn("Clock Clock: falling back to browser time zone", error);
+  if (!response.ok) {
+    throw new Error(`ipapi lookup failed with ${response.status}`);
   }
+
+  const data = await response.json();
+  return {
+    timezone: data?.timezone,
+    countryCode: data?.country_code
+  };
+}
+
+async function fetchFromIpWho() {
+  const response = await fetch("https://ipwho.is/");
+
+  if (!response.ok) {
+    throw new Error(`ipwho lookup failed with ${response.status}`);
+  }
+
+  const data = await response.json();
+
+  if (data?.success === false) {
+    throw new Error("ipwho returned unsuccessful response");
+  }
+
+  return {
+    timezone: data?.timezone?.id,
+    countryCode: data?.country_code
+  };
+}
+
+async function syncLocationByIp() {
+  const providers = [fetchFromIpApi, fetchFromIpWho];
+
+  for (const provider of providers) {
+    try {
+      const location = await provider();
+
+      if (location?.timezone) {
+        state.timeZone = location.timezone;
+      }
+
+      if (/^[a-z]{2}$/i.test(location?.countryCode || "")) {
+        state.countryCode = location.countryCode.toUpperCase();
+      }
+
+      state.lastSync = Date.now();
+      await chrome.storage.local.set({ clockClockState: state });
+      return;
+    } catch (error) {
+      console.warn("Clock Clock: location provider failed", error);
+    }
+  }
+
+  state.lastSync = Date.now();
+  await chrome.storage.local.set({ clockClockState: state });
 }
 
 function updateToolbarClock() {

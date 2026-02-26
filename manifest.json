@@ -5,7 +5,8 @@
   "version": "1.0.0",
   "permissions": ["storage"],
   "host_permissions": [
-    "https://ipapi.co/*"
+    "https://ipapi.co/*",
+    "https://ipwho.is/*"
   ],
   "background": {
     "service_worker": "background.js",
