@@ -1,5 +1,10 @@
 const DEFAULT_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 
+const TIME_ZONE_COUNTRY_FALLBACKS = {
+  "Asia/Calcutta": "IN",
+  "Asia/Kolkata": "IN"
+};
+
 function getLocaleCountryCode() {
   const uiLanguage = chrome.i18n?.getUILanguage?.() || "";
   const localeParts = uiLanguage.split(/[-_]/);
@@ -19,7 +24,7 @@ const state = {
 };
 
 const toFlagEmoji = (countryCode) => {
-  if (!countryCode || countryCode.length !== 2) {
+  if (!/^[a-z]{2}$/i.test(countryCode || "")) {
     return "🌐";
   }
 
@@ -29,6 +34,19 @@ const toFlagEmoji = (countryCode) => {
 
   return String.fromCodePoint(...codePoints);
 };
+
+function normalizeCountryCode(countryCode) {
+  if (/^[a-z]{2}$/i.test(countryCode || "")) {
+    return countryCode.toUpperCase();
+  }
+
+  const fromTimeZone = TIME_ZONE_COUNTRY_FALLBACKS[state.timeZone];
+  if (/^[a-z]{2}$/i.test(fromTimeZone || "")) {
+    return fromTimeZone;
+  }
+
+  return state.countryCode;
+}
 
 const formatTime = () =>
   new Intl.DateTimeFormat([], {
@@ -82,10 +100,7 @@ async function syncLocationByIp() {
         state.timeZone = location.timezone;
       }
 
-      if (/^[a-z]{2}$/i.test(location?.countryCode || "")) {
-        state.countryCode = location.countryCode.toUpperCase();
-      }
-
+      state.countryCode = normalizeCountryCode(location?.countryCode);
       state.lastSync = Date.now();
       await chrome.storage.local.set({ clockClockState: state });
       return;
@@ -94,6 +109,7 @@ async function syncLocationByIp() {
     }
   }
 
+  state.countryCode = normalizeCountryCode("");
   state.lastSync = Date.now();
   await chrome.storage.local.set({ clockClockState: state });
 }
@@ -134,6 +150,7 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "clock-clock:get-state") {
     sendResponse({
+      countryCode: state.countryCode,
       flag: toFlagEmoji(state.countryCode),
       time: formatTime(),
       timeZone: state.timeZone
