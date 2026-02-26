@@ -1,0 +1,53 @@
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-width: 210px;
+  min-height: 190px;
+  display: grid;
+  place-items: center;
+  font-family: "Inter", "Segoe UI", Roboto, system-ui, sans-serif;
+  background: linear-gradient(160deg, #0f172a 0%, #111827 100%);
+  color: #f9fafb;
+}
+
+.clock {
+  width: 100%;
+  text-align: center;
+  padding: 18px 14px;
+  box-sizing: border-box;
+}
+
+.flag-image {
+  width: 56px;
+  height: 38px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  display: none;
+  margin: 0 auto 8px;
+}
+
+.flag-fallback {
+  font-size: 34px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.time {
+  font-size: 64px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+
+.zone {
+  margin-top: 8px;
+  font-size: 13px;
+  color: #cbd5e1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
