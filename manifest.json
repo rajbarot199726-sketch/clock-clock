@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Clock Clock",
+  "description": "A super lightweight toolbar clock that auto-detects your local time by IP.",
+  "version": "1.0.0",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://ipapi.co/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Clock Clock",
+    "default_popup": "popup.html"
+  }
+}
