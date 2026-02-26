@@ -1,16 +1,26 @@
-const toFlagEmoji = (countryCode) => {
-  if (!/^[a-z]{2}$/i.test(countryCode || "")) {
-    return "🌐";
+const flagImage = document.getElementById("flagImage");
+const flagFallback = document.getElementById("flagFallback");
+
+function applyFlag(flagUrl, countryCode) {
+  if (!flagUrl) {
+    flagImage.style.display = "none";
+    flagFallback.style.display = "block";
+    return;
   }
 
-  const codePoints = [...countryCode.toUpperCase()].map(
-    (char) => 127397 + char.charCodeAt(0)
-  );
+  flagImage.alt = `${countryCode || "Unknown"} flag`;
+  flagImage.src = flagUrl;
+}
 
-  return String.fromCodePoint(...codePoints);
-};
+flagImage.addEventListener("load", () => {
+  flagImage.style.display = "block";
+  flagFallback.style.display = "none";
+});
 
-const hasRegionalIndicatorEmoji = (value) => /[\u{1F1E6}-\u{1F1FF}]{2}/u.test(value || "");
+flagImage.addEventListener("error", () => {
+  flagImage.style.display = "none";
+  flagFallback.style.display = "block";
+});
 
 async function loadState() {
   const response = await chrome.runtime.sendMessage({ type: "clock-clock:get-state" });
@@ -19,11 +29,7 @@ async function loadState() {
     return;
   }
 
-  const resolvedFlag = hasRegionalIndicatorEmoji(response.flag)
-    ? response.flag
-    : toFlagEmoji(response.countryCode);
-
-  document.getElementById("flag").textContent = resolvedFlag;
+  applyFlag(response.flagUrl, response.countryCode);
   document.getElementById("time").textContent = response.time;
   document.getElementById("zone").textContent = response.timeZone;
 }

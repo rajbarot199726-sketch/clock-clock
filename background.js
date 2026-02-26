@@ -5,6 +5,8 @@ const TIME_ZONE_COUNTRY_FALLBACKS = {
   "Asia/Kolkata": "IN"
 };
 
+const FLAG_IMAGE_CACHE = new Map();
+
 function getLocaleCountryCode() {
   const uiLanguage = chrome.i18n?.getUILanguage?.() || "";
   const localeParts = uiLanguage.split(/[-_]/);
@@ -21,18 +23,6 @@ const state = {
   timeZone: DEFAULT_TIME_ZONE,
   countryCode: getLocaleCountryCode(),
   lastSync: null
-};
-
-const toFlagEmoji = (countryCode) => {
-  if (!/^[a-z]{2}$/i.test(countryCode || "")) {
-    return "🌐";
-  }
-
-  const codePoints = [...countryCode.toUpperCase()].map(
-    (char) => 127397 + char.charCodeAt(0)
-  );
-
-  return String.fromCodePoint(...codePoints);
 };
 
 function normalizeCountryCode(countryCode) {
@@ -55,6 +45,73 @@ const formatTime = () =>
     hour12: false,
     timeZone: state.timeZone
   }).format(new Date());
+
+const getFlagUrl = (countryCode) => {
+  const normalized = normalizeCountryCode(countryCode).toLowerCase();
+  return `https://flagcdn.com/${normalized}.svg`;
+};
+
+async function getFlagBitmap(countryCode) {
+  const normalized = normalizeCountryCode(countryCode);
+
+  if (FLAG_IMAGE_CACHE.has(normalized)) {
+    return FLAG_IMAGE_CACHE.get(normalized);
+  }
+
+  const response = await fetch(getFlagUrl(normalized));
+  if (!response.ok) {
+    throw new Error(`flagcdn lookup failed with ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const bitmap = await createImageBitmap(blob);
+  FLAG_IMAGE_CACHE.set(normalized, bitmap);
+  return bitmap;
+}
+
+function drawClockImageData(size, time, flagBitmap) {
+  const canvas = new OffscreenCanvas(size, size);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#1f2937";
+  ctx.fillRect(0, 0, size, size);
+
+  if (flagBitmap) {
+    const flagWidth = Math.round(size * 0.7);
+    const flagHeight = Math.round(size * 0.34);
+    const flagX = Math.round((size - flagWidth) / 2);
+    const flagY = Math.round(size * 0.06);
+    ctx.drawImage(flagBitmap, flagX, flagY, flagWidth, flagHeight);
+  }
+
+  ctx.fillStyle = "#ffffff";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `700 ${Math.round(size * 0.3)}px sans-serif`;
+  ctx.fillText(time, size / 2, size * 0.72);
+
+  return ctx.getImageData(0, 0, size, size);
+}
+
+async function setToolbarIcon() {
+  const time = formatTime();
+  const shortTime = time.replace(":", "");
+  let flagBitmap = null;
+
+  try {
+    flagBitmap = await getFlagBitmap(state.countryCode);
+  } catch (error) {
+    console.warn("Clock Clock: flag image load failed", error);
+  }
+
+  const imageData = {
+    16: drawClockImageData(16, shortTime, flagBitmap),
+    32: drawClockImageData(32, shortTime, flagBitmap)
+  };
+
+  await chrome.action.setIcon({ imageData });
+  await chrome.action.setTitle({ title: `${time} (${state.timeZone})` });
+}
 
 async function fetchFromIpApi() {
   const response = await fetch("https://ipapi.co/json/");
@@ -114,16 +171,6 @@ async function syncLocationByIp() {
   await chrome.storage.local.set({ clockClockState: state });
 }
 
-function updateToolbarClock() {
-  const time = formatTime();
-  const flag = toFlagEmoji(state.countryCode);
-
-  chrome.action.setBadgeText({ text: time.replace(":", "") });
-  chrome.action.setBadgeBackgroundColor({ color: "#1f2937" });
-  chrome.action.setBadgeTextColor({ color: "#ffffff" });
-  chrome.action.setTitle({ title: `${flag} ${time} (${state.timeZone})` });
-}
-
 let isScheduled = false;
 
 function scheduleUpdates() {
@@ -132,8 +179,8 @@ function scheduleUpdates() {
   }
 
   isScheduled = true;
-  updateToolbarClock();
-  setInterval(updateToolbarClock, 1000);
+  setToolbarIcon();
+  setInterval(setToolbarIcon, 1000);
   setInterval(syncLocationByIp, 6 * 60 * 60 * 1000);
 }
 
@@ -151,9 +198,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === "clock-clock:get-state") {
     sendResponse({
       countryCode: state.countryCode,
-      flag: toFlagEmoji(state.countryCode),
       time: formatTime(),
-      timeZone: state.timeZone
+      timeZone: state.timeZone,
+      flagUrl: getFlagUrl(state.countryCode)
     });
   }
 
